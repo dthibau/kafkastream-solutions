@@ -13,6 +13,8 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
 import org.formation.model.Coursier;
 import org.formation.model.CoursierSerde;
@@ -80,8 +82,8 @@ public class PositionStream {
                 .selectKey((k, coursier) -> coursier.getPosition())
                 .branch((position, coursier) -> position.getLatitude() > 45.0,
                         (position, coursier) -> true);
-        branches[0].to(OUTPUT_TOPIC+"-nord", Produced.with(positionAvroSerde, coursierAvroSerde));
-        branches[1].to(OUTPUT_TOPIC+"-sud", Produced.with(positionAvroSerde, coursierAvroSerde));
+        branches[0].groupByKey(Grouped.with(positionSerde, coursierSerde)).count(Materialized.with(positionSerde, Serdes.Long())).toStream().mapValues(value -> value.toString()).to(OUTPUT_TOPIC+"-nord", Produced.with(positionAvroSerde, Serdes.String()));
+        branches[1].groupByKey(Grouped.with(positionSerde, coursierSerde)).count(Materialized.with(positionSerde, Serdes.Long())).toStream().mapValues(value -> value.toString()).to(OUTPUT_TOPIC+"-sud", Produced.with(positionAvroSerde, Serdes.String()));
 
         final Topology topology = builder.build();
 
