@@ -8,14 +8,9 @@ import org.apache.avro.Schema;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
-import org.apache.kafka.streams.kstream.Grouped;
-import org.apache.kafka.streams.kstream.Materialized;
-import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.*;
 import org.formation.model.Coursier;
 import org.formation.model.CoursierSerde;
 import org.formation.model.Position;
@@ -24,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -65,6 +61,8 @@ public class PositionStream {
         coursierSerde.configure(config, false); // false pour le "isKey"
         // Utilisation du SerDe Avro dans une topologie Kafka Streams
         Serde<Position> positionAvroSerde = Serdes.serdeFrom(positionSerde.serializer(), positionSerde.deserializer());
+
+
         Serde<Coursier> coursierAvroSerde = Serdes.serdeFrom(coursierSerde.serializer(), coursierSerde.deserializer());
 
         // Création d’une topolgie de processeurs
@@ -82,8 +80,20 @@ public class PositionStream {
                 .selectKey((k, coursier) -> coursier.getPosition())
                 .branch((position, coursier) -> position.getLatitude() > 45.0,
                         (position, coursier) -> true);
-        branches[0].groupByKey(Grouped.with(positionSerde, coursierSerde)).count(Materialized.with(positionSerde, Serdes.Long())).toStream().mapValues(value -> value.toString()).to(OUTPUT_TOPIC+"-nord", Produced.with(positionAvroSerde, Serdes.String()));
-        branches[1].groupByKey(Grouped.with(positionSerde, coursierSerde)).count(Materialized.with(positionSerde, Serdes.Long())).toStream().mapValues(value -> value.toString()).to(OUTPUT_TOPIC+"-sud", Produced.with(positionAvroSerde, Serdes.String()));
+        branches[0].groupByKey(Grouped.with(positionSerde, coursierSerde))
+                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))
+                .count(Materialized.with(positionSerde, Serdes.Long())).toStream()
+                .map((windowedPosition,count) -> {
+                    return new KeyValue<Position,String>(windowedPosition.key(),count.toString());
+                })
+                .to(OUTPUT_TOPIC+"-nord", Produced.with(positionSerde, Serdes.String()));
+        branches[1].groupByKey(Grouped.with(positionSerde, coursierSerde))
+                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))
+                .count(Materialized.with(positionSerde, Serdes.Long())).toStream()
+                .map((windowedPosition,count) -> {
+                    return new KeyValue<Position,String>(windowedPosition.key(),count.toString());
+                })
+                .to(OUTPUT_TOPIC+"-sud", Produced.with(positionSerde, Serdes.String()));
 
         final Topology topology = builder.build();
 
