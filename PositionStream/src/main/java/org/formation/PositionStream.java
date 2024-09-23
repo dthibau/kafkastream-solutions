@@ -65,11 +65,9 @@ public class PositionStream {
         final StreamsBuilder builder = new StreamsBuilder();
         builder.<String, Coursier>stream(INPUT_TOPIC)
                 .mapValues(c ->{
-                    BigDecimal lat = new BigDecimal(c.getPosition().getLatitude());
-                    lat = lat.setScale(1, RoundingMode.HALF_UP);  // Arrondir à 1 décimale
-                    BigDecimal lon = new BigDecimal(c.getPosition().getLongitude());
-                    lon = lon.setScale(1, RoundingMode.HALF_UP);  // Arrondir à 1 décimale
-                    c.setPosition(new Position(lat.doubleValue(), lon.doubleValue()));
+                    Double lat = Double.valueOf(Math.round(c.getPosition().getLatitude()/10)*10);
+                    Double lon = Double.valueOf(Math.round(c.getPosition().getLongitude()/10)*10);
+                    c.setPosition(new Position(lat, lon));
                     return c;
                 })
                 .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), valueSerde));
