@@ -67,7 +67,10 @@ public class PositionStream {
 
         // Création d’une topolgie de processeurs
         final StreamsBuilder builder = new StreamsBuilder();
-        var branches = builder.<String, Coursier>stream(INPUT_TOPIC)
+        var inputStream = builder.<String, Coursier>stream(INPUT_TOPIC);
+        inputStream.to(OUTPUT_TOPIC, Produced.with(Serdes.String(), coursierAvroSerde));
+
+        var branches = inputStream
                 .mapValues(c ->{
                     Double lat = Double.valueOf(Math.round(c.getPosition().getLatitude()/10)*10);
                     Double lon = Double.valueOf(Math.round(c.getPosition().getLongitude()/10)*10);
