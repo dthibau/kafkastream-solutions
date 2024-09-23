@@ -1,0 +1,29 @@
+{
+  "type": "record",
+  "name": "Coursier",
+  "namespace": "org.formation.model",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    },
+    {
+      "name": "position",
+      "type": {
+        "type": "record",
+        "name": "Position",
+        "namespace": "org.formation.model",
+        "fields": [
+          {
+            "name": "latitude",
+            "type": "double"
+          },
+          {
+            "name": "longitude",
+            "type": "double"
+          }
+        ]
+      }
+    }
+  ]
+}
