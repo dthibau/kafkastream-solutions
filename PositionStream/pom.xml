@@ -64,6 +64,12 @@
             <artifactId>logback-classic</artifactId>
             <version>1.2.11</version>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.9.3</version> <!-- Vérifiez la dernière version disponible -->
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <repositories>
         <repository>
@@ -83,7 +89,11 @@
                     <target>${java.version}</target>
                 </configuration>
             </plugin>
-
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.0.0-M5</version> <!-- Vérifiez la dernière version -->
+                </plugin>
             <!-- Avro Plugin to Generate Avro Classes from Schema -->
             <plugin>
                 <groupId>org.apache.avro</groupId>

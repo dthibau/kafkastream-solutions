@@ -8,9 +8,11 @@ import org.apache.avro.Schema;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
 import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.state.KeyValueStore;
 import org.formation.model.Coursier;
 import org.formation.model.CoursierSerde;
 import org.formation.model.Position;
@@ -20,9 +22,7 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 
 public class PositionStream {
@@ -61,7 +61,7 @@ public class PositionStream {
         coursierSerde.configure(config, false); // false pour le "isKey"
         // Utilisation du SerDe Avro dans une topologie Kafka Streams
         Serde<Position> positionAvroSerde = Serdes.serdeFrom(positionSerde.serializer(), positionSerde.deserializer());
-
+        Serde<ArrayList<String>> listSerde = Serdes.ListSerde(ArrayList.class, Serdes.String());
 
         Serde<Coursier> coursierAvroSerde = Serdes.serdeFrom(coursierSerde.serializer(), coursierSerde.deserializer());
 
@@ -70,30 +70,51 @@ public class PositionStream {
         var inputStream = builder.<String, Coursier>stream(INPUT_TOPIC);
         inputStream.to(OUTPUT_TOPIC, Produced.with(Serdes.String(), coursierAvroSerde));
 
-        var branches = inputStream
-                .mapValues(c ->{
-                    Double lat = Double.valueOf(Math.round(c.getPosition().getLatitude()/10)*10);
-                    Double lon = Double.valueOf(Math.round(c.getPosition().getLongitude()/10)*10);
-                    c.setPosition(new Position(lat, lon));
-                    return c;
-                })
-                .selectKey((k, coursier) -> coursier.getPosition())
-                .branch((position, coursier) -> position.getLatitude() > 45.0,
-                        (position, coursier) -> true);
-        branches[0].groupByKey(Grouped.with(positionSerde, coursierSerde))
-                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))
-                .count(Materialized.with(positionSerde, Serdes.Long())).toStream()
-                .map((windowedPosition,count) -> {
-                    return new KeyValue<Position,String>(windowedPosition.key(),count.toString());
-                })
-                .to(OUTPUT_TOPIC+"-nord", Produced.with(positionSerde, Serdes.String()));
-        branches[1].groupByKey(Grouped.with(positionSerde, coursierSerde))
-                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))
-                .count(Materialized.with(positionSerde, Serdes.Long())).toStream()
-                .map((windowedPosition,count) -> {
-                    return new KeyValue<Position,String>(windowedPosition.key(),count.toString());
-                })
-                .to(OUTPUT_TOPIC+"-sud", Produced.with(positionSerde, Serdes.String()));
+        // Arrondir les Positions
+        KStream<String,Position> coursierStream = inputStream
+                .mapValues( c ->{
+                    Double lat = Double.valueOf(Math.round(c.getPosition().getLatitude()));
+                    Double lon = Double.valueOf(Math.round(c.getPosition().getLongitude()));
+                    return new Position(lat, lon);
+                });
+
+        // Stocker les dernières positions dans uen table
+        KTable<String,Position> coursiersTable = coursierStream.toTable(
+                Materialized.<String, Position, KeyValueStore<Bytes, byte[]>>as("coursiers-last-position")
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(positionSerde)
+        );
+
+        // Grouper (partitionner) par rapport à la Position
+        KGroupedTable<Position, String> groupedTable = coursiersTable.groupBy((key, value) ->  KeyValue.pair(value, key), Grouped.with(positionSerde, Serdes.String()));
+
+        // Agrégation avec adder et substractor
+        KTable<Position,ArrayList<String>> listeCoursierParPosition = groupedTable
+                 .aggregate(
+                  () -> {
+                      System.out.println("Initializing");
+                      return new ArrayList<String>();
+                  },
+                    (position, newCoursier, currentList) -> {
+                      System.out.println("Current list for position " + position + " is " + currentList + "adding " + newCoursier);
+                      if ( !currentList.contains(newCoursier) ) {
+                          currentList.add(newCoursier);
+                      }
+                        return currentList;
+                    },
+                   (position, oldCoursier, currentList)  -> {
+                        System.out.println("Current list for position " + position + " is " + currentList + "removing " + oldCoursier);
+                        ArrayList<String> newList = new ArrayList<>(currentList);
+                        newList.remove(oldCoursier);
+                        return newList;
+                    },
+                        Materialized.<Position, ArrayList<String>, KeyValueStore<Bytes, byte[]>>as("aggregated-table-store") /* state store name */
+                                .withValueSerde(listSerde)
+                                .withKeySerde(positionSerde)/* serde for aggregate value */
+                );
+
+        listeCoursierParPosition.toStream().mapValues(v -> v.toString()).to("coursiersParPosition",Produced.with(positionSerde,Serdes.String()));
+
 
         final Topology topology = builder.build();
 
