@@ -30,7 +30,7 @@ import java.util.concurrent.CountDownLatch;
 public class PositionStream {
 
     public static String APPLICATION_ID = "position-avro";
-    public static String BOOTSTRAP_SERVERS = "localhost:19092";
+    public static String BOOTSTRAP_SERVERS = "localhost:19092,localhost:19093,localhost:19094";
     public static String REGISTRY_URL = "http://localhost:8081";
 
     public static String INPUT_TOPIC = "position";
@@ -67,7 +67,7 @@ public class PositionStream {
 
         // Création d’une topolgie de processeurs
         final StreamsBuilder builder = new StreamsBuilder();
-        builder.<String, Coursier>stream(INPUT_TOPIC)
+        var branches = builder.<String, Coursier>stream(INPUT_TOPIC)
                 .mapValues(c ->{
                     Double lat = Double.valueOf(Math.round(c.getPosition().getLatitude()/10)*10);
                     Double lon = Double.valueOf(Math.round(c.getPosition().getLongitude()/10)*10);
@@ -75,7 +75,10 @@ public class PositionStream {
                     return c;
                 })
                 .selectKey((k, coursier) -> coursier.getPosition())
-                .to(OUTPUT_TOPIC, Produced.with(positionAvroSerde, coursierAvroSerde));
+                .branch((position, coursier) -> position.getLatitude() > 45.0,
+                        (position, coursier) -> true);
+        branches[0].to(OUTPUT_TOPIC+"-nord", Produced.with(positionAvroSerde, coursierAvroSerde));
+        branches[1].to(OUTPUT_TOPIC+"-sud", Produced.with(positionAvroSerde, coursierAvroSerde));
 
         final Topology topology = builder.build();
 
