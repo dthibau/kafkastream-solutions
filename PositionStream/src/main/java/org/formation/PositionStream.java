@@ -50,16 +50,20 @@ public class PositionStream {
         props.put(StreamsConfig.DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG, LogAndContinueExceptionHandler.class.getName());
         props.put("consumer." + ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "5000");
         props.put("consumer."+ ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+        props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
+
 
 
         Map<String, Object> config = new HashMap<>();
         config.put("schema.registry.url", REGISTRY_URL); // URL
 
-        SpecificAvroSerde<Coursier> avroSerde = new SpecificAvroSerde<>();
-        avroSerde.configure(config, false); // false pour le "isKey"
-
+        SpecificAvroSerde<Position> positionSerde = new SpecificAvroSerde<>();
+        positionSerde.configure(config, true); // false pour le "isKey"
+        SpecificAvroSerde<Coursier> coursierSerde = new SpecificAvroSerde<>();
+        coursierSerde.configure(config, false); // false pour le "isKey"
         // Utilisation du SerDe Avro dans une topologie Kafka Streams
-        Serde<Coursier> valueSerde = Serdes.serdeFrom(avroSerde.serializer(), avroSerde.deserializer());
+        Serde<Position> positionAvroSerde = Serdes.serdeFrom(positionSerde.serializer(), positionSerde.deserializer());
+        Serde<Coursier> coursierAvroSerde = Serdes.serdeFrom(coursierSerde.serializer(), coursierSerde.deserializer());
 
         // Création d’une topolgie de processeurs
         final StreamsBuilder builder = new StreamsBuilder();
@@ -70,7 +74,8 @@ public class PositionStream {
                     c.setPosition(new Position(lat, lon));
                     return c;
                 })
-                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), valueSerde));
+                .selectKey((k, coursier) -> coursier.getPosition())
+                .to(OUTPUT_TOPIC, Produced.with(positionAvroSerde, coursierAvroSerde));
 
         final Topology topology = builder.build();
 
