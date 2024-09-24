@@ -32,28 +32,7 @@
             <version>${jackson.version}</version>
         </dependency>
 
-        <!-- Confluent Kafka Avro Serializer -->
-        <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>kafka-avro-serializer</artifactId>
-            <version>${confluent.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>kafka-streams-avro-serde</artifactId>
-            <version>7.4.0</version> <!-- Adaptez la version selon votre environnement -->
-        </dependency>
-
-
-        <!-- Avro -->
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.11.2</version>
-        </dependency>
-
-        <!-- Logging with SLF4J and Logback -->
+         <!-- Logging with SLF4J and Logback -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>

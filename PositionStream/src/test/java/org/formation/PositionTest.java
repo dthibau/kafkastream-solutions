@@ -1,6 +1,5 @@
 package org.formation;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.formation.model.Position;
 import org.junit.jupiter.api.Test;
 
