@@ -49,14 +49,12 @@ public class PositionStream {
         // Création d’une topolgie de processeurs
         final StreamsBuilder builder = new StreamsBuilder();
         var positionStream = builder.<String, CoursierPosition>stream(POSITION_TOPIC, Consumed.with(Serdes.String(), coursierPositionSerde));
-        var statutTable = builder.<String, CoursierStatut>table(STATUT_TOPIC, Consumed.with(Serdes.String(), coursierStatutSerde));
+        var statutTable = builder.<String, CoursierStatut>globalTable(STATUT_TOPIC, Consumed.with(Serdes.String(), coursierStatutSerde));
 
         KStream<String, String> coursiersPositions = positionStream.join(
                 statutTable,
-                (coursierPosition, coursierStatut) -> coursierPosition.toString() + coursierStatut.toString(), // Valeur jointe
-                Joined.with(Serdes.String(),
-                        Serdes.serdeFrom(coursierPositionSerde.serializer(), coursierPositionSerde.deserializer()),
-                        Serdes.serdeFrom(coursierStatutSerde.serializer(), coursierStatutSerde.deserializer()))
+                (positionKey, position) -> positionKey,
+                (coursierPosition, coursierStatut) -> coursierPosition.toString() + "\n" + coursierStatut.toString()
         );
 
         coursiersPositions.to("coursiers-statut-position", Produced.with(Serdes.String(), Serdes.String()));
