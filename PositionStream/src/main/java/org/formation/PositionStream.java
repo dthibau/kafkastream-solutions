@@ -3,9 +3,13 @@ package org.formation;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
 import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.state.QueryableStoreTypes;
+import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.formation.model.CoursierPosition;
 import org.formation.model.CoursierStatut;
 import org.formation.model.JsonSerde;
@@ -13,6 +17,9 @@ import org.formation.model.JsonSerde;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class PositionStream {
 
@@ -49,7 +56,11 @@ public class PositionStream {
         // Création d’une topolgie de processeurs
         final StreamsBuilder builder = new StreamsBuilder();
         var positionStream = builder.<String, CoursierPosition>stream(POSITION_TOPIC, Consumed.with(Serdes.String(), coursierPositionSerde));
-        var statutTable = builder.<String, CoursierStatut>globalTable(STATUT_TOPIC, Consumed.with(Serdes.String(), coursierStatutSerde));
+        var statutTable = builder.<String, CoursierStatut>globalTable(STATUT_TOPIC,
+                Consumed.with(Serdes.String(), coursierStatutSerde),
+                Materialized.<String, CoursierStatut, KeyValueStore<Bytes, byte[]>>as("statut-store")
+                .withKeySerde(Serdes.String())
+                .withValueSerde(coursierStatutSerde));
 
         KStream<String, String> coursiersPositions = positionStream.join(
                 statutTable,
@@ -76,8 +87,32 @@ public class PositionStream {
                 latch.countDown();
             }
         });
+        // Configuration du ScheduledExecutorService pour exécuter la tâche toutes les secondes
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-        // Démarrage du stream
+        // Définition de la tâche périodique
+        Runnable queryTask = () -> {
+            try {
+                // Récupération du store d'état
+                ReadOnlyKeyValueStore<String, CoursierStatut> store =
+                        streams.store(StoreQueryParameters.fromNameAndType("statut-store", QueryableStoreTypes.keyValueStore()));
+
+                // Exécution de la requête - exemple : récupération d'une clé spécifique
+                CoursierStatut coursierStatut = store.get("0");
+
+                // Traitement du résultat
+                if (coursierStatut != null) {
+                    System.out.println("Coursier ID 0 : " + coursierStatut);
+                } else {
+                    System.out.println("Coursier ID 0 non trouvé");
+                }
+            } catch (Exception e) {
+                System.err.println("Erreur lors de l'interrogation de la KTable : " + e.getMessage());
+            }
+        };
+        // Planification de la tâche toutes les secondes
+        scheduler.scheduleAtFixedRate(queryTask, 0, 1, TimeUnit.SECONDS);
+        
         try {
             streams.start();
             latch.await();
