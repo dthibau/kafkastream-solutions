@@ -48,7 +48,7 @@ public class PositionStream {
         props.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE_V2);
         props.put(StreamsConfig.REPLICATION_FACTOR_CONFIG, 5);
         props.put(StreamsConfig.DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG, LogAndContinueExceptionHandler.class.getName());
-        props.put("consumer." + ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "5000");
+        props.put(StreamsConfig.consumerPrefix( ConsumerConfig.MAX_POLL_RECORDS_CONFIG), "5000");
         props.put("consumer."+ ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
 
 
