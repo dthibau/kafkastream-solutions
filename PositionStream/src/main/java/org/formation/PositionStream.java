@@ -13,6 +13,8 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
+import org.apache.kafka.streams.kstream.Branched;
+import org.apache.kafka.streams.kstream.Named;
 import org.apache.kafka.streams.kstream.Produced;
 import org.formation.model.Coursier;
 import org.formation.model.CoursierSerde;
@@ -75,10 +77,12 @@ public class PositionStream {
                     return c;
                 })
                 .selectKey((k, coursier) -> coursier.getPosition())
-                .branch((position, coursier) -> position.getLatitude() > 45.0,
-                        (position, coursier) -> true);
-        branches[0].to(OUTPUT_TOPIC+"-nord", Produced.with(positionAvroSerde, coursierAvroSerde));
-        branches[1].to(OUTPUT_TOPIC+"-sud", Produced.with(positionAvroSerde, coursierAvroSerde));
+                .split(Named.as("Branche-"))
+                .branch((position, coursier) -> position.getLatitude() > 45.0, Branched.as("NORD"))
+                .defaultBranch(Branched.as("SUD"));
+
+        branches.get("Branche-NORD").to(OUTPUT_TOPIC+"-nord", Produced.with(positionAvroSerde, coursierAvroSerde));
+        branches.get("Branche-SUD").to(OUTPUT_TOPIC+"-sud", Produced.with(positionAvroSerde, coursierAvroSerde));
 
         final Topology topology = builder.build();
 
