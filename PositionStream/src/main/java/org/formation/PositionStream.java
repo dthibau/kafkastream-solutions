@@ -3,6 +3,7 @@ package org.formation;
 import io.confluent.kafka.schemaregistry.avro.AvroSchema;
 import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException;
+import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import org.apache.avro.Schema;
 import org.apache.kafka.common.serialization.Serde;
@@ -45,18 +46,15 @@ public class PositionStream {
         props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, 5);
 
         Map<String, Object> config = new HashMap<>();
-        config.put("schema.registry.url", REGISTRY_URL); // URL
+        config.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, REGISTRY_URL); // URL
 
         SpecificAvroSerde<Coursier> avroSerde = new SpecificAvroSerde<>();
         avroSerde.configure(config, false); // false pour le "isKey"
 
-        // Utilisation du SerDe Avro dans une topologie Kafka Streams
-        Serde<Coursier> valueSerde = Serdes.serdeFrom(avroSerde.serializer(), avroSerde.deserializer());
-
         // Création d’une topolgie de processeurs
         final StreamsBuilder builder = new StreamsBuilder();
         builder.<String, Coursier>stream(INPUT_TOPIC)
-                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), valueSerde));
+                .to(OUTPUT_TOPIC, Produced.with(Serdes.String(), avroSerde));
 
         final Topology topology = builder.build();
 
