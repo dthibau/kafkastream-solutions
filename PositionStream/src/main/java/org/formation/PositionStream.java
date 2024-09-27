@@ -61,7 +61,7 @@ public class PositionStream {
         coursierSerde.configure(config, false); // false pour le "isKey"
         // Utilisation du SerDe Avro dans une topologie Kafka Streams
         Serde<Position> positionAvroSerde = Serdes.serdeFrom(positionSerde.serializer(), positionSerde.deserializer());
-        Serde<ArrayList<String>> listSerde = Serdes.ListSerde(ArrayList.class, Serdes.String());
+        Serde<List<String>> listSerde = Serdes.ListSerde(ArrayList.class, Serdes.String());
 
         Serde<Coursier> coursierAvroSerde = Serdes.serdeFrom(coursierSerde.serializer(), coursierSerde.deserializer());
 
@@ -89,7 +89,7 @@ public class PositionStream {
         KGroupedTable<Position, String> groupedTable = coursiersTable.groupBy((key, value) ->  KeyValue.pair(value, key), Grouped.with(positionSerde, Serdes.String()));
 
         // Agrégation avec adder et substractor
-        KTable<Position,ArrayList<String>> listeCoursierParPosition = groupedTable
+        KTable<Position,List<String>> listeCoursierParPosition = groupedTable
                  .aggregate(
                   () -> {
                       System.out.println("Initializing");
@@ -108,12 +108,15 @@ public class PositionStream {
                         newList.remove(oldCoursier);
                         return newList;
                     },
-                        Materialized.<Position, ArrayList<String>, KeyValueStore<Bytes, byte[]>>as("aggregated-table-store") /* state store name */
+                        Materialized.<Position, List<String>, KeyValueStore<Bytes, byte[]>>as("aggregated-table-store") /* state store name */
                                 .withValueSerde(listSerde)
                                 .withKeySerde(positionSerde)/* serde for aggregate value */
                 );
 
-        listeCoursierParPosition.toStream().mapValues(v -> v.toString()).to("coursiersParPosition",Produced.with(positionSerde,Serdes.String()));
+        listeCoursierParPosition.toStream().mapValues(v -> v.toString())
+                .foreach((k,v) -> System.out.println("Position :" + k + "liste " + v));
+
+                //.to("coursiersParPosition",Produced.with(positionSerde,Serdes.String()));
 
 
         final Topology topology = builder.build();
