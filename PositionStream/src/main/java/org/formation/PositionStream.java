@@ -81,14 +81,14 @@ public class PositionStream {
                 .branch((position, coursier) -> position.getLatitude() > 45.0,
                         (position, coursier) -> true);
         branches[0].groupByKey(Grouped.with(positionSerde, coursierSerde))
-                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))
+                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(1)))
                 .count(Materialized.with(positionSerde, Serdes.Long())).toStream()
                 .map((windowedPosition,count) -> {
                     return new KeyValue<Position,String>(windowedPosition.key(),count.toString());
                 })
                 .to(OUTPUT_TOPIC+"-nord", Produced.with(positionSerde, Serdes.String()));
         branches[1].groupByKey(Grouped.with(positionSerde, coursierSerde))
-                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))
+                .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(1)))
                 .count(Materialized.with(positionSerde, Serdes.Long())).toStream()
                 .map((windowedPosition,count) -> {
                     return new KeyValue<Position,String>(windowedPosition.key(),count.toString());
