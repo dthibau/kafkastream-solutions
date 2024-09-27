@@ -26,23 +26,45 @@ CREATE STREAM position_statut AS
     FROM statut_stream c
     JOIN position_stream p
     WITHIN 5 MINUTES -- Fenêtre de jointure de 5 minutes
+    GRACE PERIOD 1 MINUTE 
     ON c.coursierId = p.coursierId
     EMIT CHANGES;
-
-select * from position_statut EMIT CHANGES;
+CREATE STREAM position_statut AS
+    SELECT c.coursierId,
+           c.firstName,
+           c.lastName,
+           c.statut,
+	   p.position
+    FROM statut_stream c
+    JOIN position_stream p
+    WITHIN 5 MINUTES -- Fenêtre de jointure de 5 minutes
+    GRACE PERIOD 1 MINUTE 
+    ON c.coursierId = p.coursierId
+    EMIT CHANGES;
+select FROM_UNIXTIME(ROWTIME),* from position_statut EMIT CHANGES;
 
 ----------------------------------------
-CREATE TABLE position_table (
+CREATE TABLE coursier_table (
     coursierId STRING PRIMARY KEY,
+    firstName STRING,
+    lastName STRING,
+    statut STRING,
     position STRUCT<latitude DOUBLE, longitude DOUBLE>
 ) WITH (
-    KAFKA_TOPIC = 'position',
+    KAFKA_TOPIC = 'POSITION_STATUT',
     VALUE_FORMAT = 'JSON'
 );
 
-select * from position_table emit changes;
+CREATE TABLE Coursier_libre AS
+  select * from coursier_table where statut='LIBRE';
+
+select * from Coursier_libre;
+
+select * from Coursier_libre emit changes;
 
 --------------------------------------------
+SELECT count(*) from Coursier_libre;
+
 SELECT COUNT_DISTINCT(coursierId)
 FROM statut_stream
   WINDOW HOPPING (SIZE 30 SECONDS, ADVANCE BY 10 SECONDS)
@@ -55,7 +77,9 @@ WINDOW TUMBLING (SIZE 30 SECONDS)
 WHERE statut = 'LIBRE'
 EMIT CHANGES;
 
---- 
-SELECT coursierId, ROUND(GEO_DISTANCE(position->latitude, position->longitude, 37.4133, -122.1162), -1) AS distanceInMiles from position_stream;
+SELECT AVG(position->latitude), AVG(position->longitude) from position_stream EMIT CHANGES;
 
-SELECT coursierId, ROUND(GEO_DISTANCE(position->latitude, position->longitude, 37.4133, -122.1162), -1) AS distanceInMiles from position_stream EMIT CHANGES;
+--- 
+SELECT FROM_UNIXTIME(ROWTIME),coursierId, ROUND(GEO_DISTANCE(position->latitude, position->longitude, 37.4133, -122.1162), -1) AS distanceInMiles from position_stream;
+
+SELECT FROM_UNIXTIME(ROWTIME),coursierId, ROUND(GEO_DISTANCE(position->latitude, position->longitude, 37.4133, -122.1162), -1) AS distanceInMiles from position_stream EMIT CHANGES;
